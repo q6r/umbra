@@ -1,0 +1,2 @@
+core/payload/*.go
+gtk/gtk

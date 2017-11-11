@@ -1,0 +1,12 @@
+syntax = "proto2";
+package payload;
+
+
+message Payload {
+    enum PAYLOAD_TYPE {
+        MSG  = 1;
+    };
+    required PAYLOAD_TYPE type = 1 [ default = MSG ];
+    required bytes body = 2;
+    optional bytes key = 3;
+}
