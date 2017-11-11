@@ -3,14 +3,14 @@ package main
 import (
 	"gx/ipfs/Qmdnza7rLi7CMNNwNhNkcs9piX5sf6rxE8FrCsPzYtUEUi/floodsub"
 	"flag"
-	"github.com/q6r/mynono/core/payload"
+	"github.com/q6r/umbra/core/payload"
 	"github.com/mattn/go-gtk/gdk"
 	"fmt"
 	"strings"
 	"strconv"
 	"github.com/olebedev/emitter"
 	"runtime"
-	"github.com/q6r/mynono/core"
+	"github.com/q6r/umbra/core"
 	"context"
 	"os"
 
