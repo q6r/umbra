@@ -1,18 +1,19 @@
 package main
 
 import (
-	"gx/ipfs/Qmdnza7rLi7CMNNwNhNkcs9piX5sf6rxE8FrCsPzYtUEUi/floodsub"
-	"flag"
-	"github.com/q6r/umbra/core/payload"
-	"github.com/mattn/go-gtk/gdk"
-	"fmt"
-	"strings"
-	"strconv"
-	"github.com/olebedev/emitter"
-	"runtime"
-	"github.com/q6r/umbra/core"
 	"context"
+	"flag"
+	"fmt"
 	"os"
+	"runtime"
+	"strconv"
+	"strings"
+
+	floodsub "github.com/libp2p/go-floodsub"
+	"github.com/mattn/go-gtk/gdk"
+	"github.com/olebedev/emitter"
+	"github.com/q6r/umbra/core"
+	"github.com/q6r/umbra/core/payload"
 
 	"github.com/mattn/go-gtk/gdkpixbuf"
 	"github.com/mattn/go-gtk/glib"
@@ -84,7 +85,7 @@ func main() {
 		if strings.Contains(event.OriginalTopic, "contact:") {
 			updateContactStore(c, contactStore)
 		} else if strings.Contains(event.OriginalTopic, "message:recieved") {
-			msg    := event.Args[0].(floodsub.Message) // TODO : check casting if ok
+			msg := event.Args[0].(floodsub.Message) // TODO : check casting if ok
 			outMsg := fmt.Sprintf("%s : %s\n", msg.GetFrom().Pretty(), string(msg.GetData()))
 
 			buffer, ok := chatBuffer[msg.GetFrom().Pretty()]
@@ -104,7 +105,7 @@ func main() {
 		} else {
 			fmt.Printf("event = %#v\n", event)
 		}
-	}) 
+	})
 	err = c.Load()
 	if err != nil {
 		fmt.Printf("Unable to reload core : %s", err.Error())
@@ -115,9 +116,11 @@ func main() {
 		var path *gtk.TreePath
 		var column *gtk.TreeViewColumn
 		treeview.GetCursor(&path, &column)
-		
+
 		contactIndex, err := strconv.Atoi(path.String())
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		contact := c.Contacts[contactIndex]
 
 		createChatWindow(window, c, contact)
@@ -163,11 +166,11 @@ func main() {
 			- Button 1/4
 */
 func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
-	chatWindow := gtk.NewWindow( gtk.WINDOW_TOPLEVEL )
+	chatWindow := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
 	chatWindow.SetTitle(contact.ID)
 	chatWindow.SetTypeHint(gdk.WINDOW_TYPE_HINT_DIALOG)
 	chatWindow.SetPosition(gtk.WIN_POS_CENTER)
-	
+
 	vbox := gtk.NewVBox(false, 1)
 	chatWindow.Add(vbox)
 
@@ -215,7 +218,6 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 
 	hpaned := gtk.NewHPaned()
 	vpaned.Add(hpaned)
-	
 
 	textEntry := gtk.NewEntry()
 	textEntry.SetEditable(true)
@@ -242,7 +244,7 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 		} else {
 			outMsg = fmt.Sprintf("%s : %s\n", c.Node.Identity.Pretty(), textEntry.GetText())
 		}
-		
+
 		var tvIter gtk.TextIter
 		textViewBuffer.GetEndIter(&tvIter)
 		textViewBuffer.Insert(&tvIter, outMsg)
@@ -260,12 +262,12 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 func createAddContactWindow(c *core.Core) {
 	dialog := gtk.NewDialog()
 	dialog.SetTitle("Add")
-	
+
 	vbox := dialog.GetVBox()
 
 	label := gtk.NewLabel("ID")
 	vbox.Add(label)
-	
+
 	idEntry := gtk.NewEntry()
 	idEntry.SetEditable(true)
 	vbox.Add(idEntry)
@@ -306,7 +308,7 @@ func updateContactStore(c *core.Core, contactStore *gtk.TreeStore) {
 		_, ok := chatBuffer[contact.ID]
 		if !ok {
 			textViewTagTable := gtk.NewTextTagTable()
-			textViewBuffer   := gtk.NewTextBuffer(textViewTagTable)
+			textViewBuffer := gtk.NewTextBuffer(textViewTagTable)
 			chatBuffer[contact.ID] = textViewBuffer
 		}
 

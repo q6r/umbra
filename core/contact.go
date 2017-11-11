@@ -1,6 +1,9 @@
 package core
 
 import (
+	floodsub "gx/ipfs/QmUUSLfvihARhCxxgnjW4hmycJpPvzNu12Aaz6JWVdfnLg/go-libp2p-floodsub"
+	peer "gx/ipfs/QmXYjuNuxVzXKJCfWasQk1RqkhVLDM9jtUKhqc2WPQmFSB/go-libp2p-peer"
+	"fmt"
 	"crypto/sha1"
 	"github.com/gtank/cryptopasta"
 	"io"
@@ -12,9 +15,6 @@ import (
 	"encoding/hex"
 	"github.com/golang/protobuf/proto"
 	"context"
-	"gx/ipfs/Qmdnza7rLi7CMNNwNhNkcs9piX5sf6rxE8FrCsPzYtUEUi/floodsub"
-	"fmt"
-	peer "gx/ipfs/QmXYjuNuxVzXKJCfWasQk1RqkhVLDM9jtUKhqc2WPQmFSB/go-libp2p-peer"
 )
 
 // Contact
