@@ -48,7 +48,7 @@ func main() {
 
 	gtk.Init(&os.Args)
 	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
-	window.SetTitle("Chat")
+	window.SetTitle("Umbra")
 	window.Connect("destroy", gtk.MainQuit)
 
 	//--------------------------------
@@ -59,7 +59,7 @@ func main() {
 	//--------------------------------
 	// Menubar
 	//--------------------------------
-	menubar := gtk.NewMenuBar()
+	menubar := createMainMenubar(c)
 	vbox.PackStart(menubar, false, false, 0)
 
 	//--------------------------------
@@ -126,16 +126,23 @@ func main() {
 		createChatWindow(window, c, contact)
 	})
 
-	//--------------------------------
-	// GtkMenuBar
-	//--------------------------------
+	// end
+	window.Add(vbox)
+	window.SetSizeRequest(400, 200)
+	window.ShowAll()
+
+	gtk.Main()
+}
+
+func createMainMenubar(c *core.Core) *gtk.MenuBar {
+	menubar := gtk.NewMenuBar()
 	fileMenuItem := gtk.NewMenuItemWithMnemonic("_File")
 	menubar.Append(fileMenuItem)
 
 	fileSubMenuItem := gtk.NewMenu()
 	fileMenuItem.SetSubmenu(fileSubMenuItem)
 
-	fileAddContactSubMenuItem := gtk.NewMenuItemWithLabel("Add")
+	fileAddContactSubMenuItem := gtk.NewMenuItemWithMnemonic("_Add")
 	fileAddContactSubMenuItem.Connect("activate", func() {
 		createAddContactWindow(c)
 	})
@@ -146,13 +153,38 @@ func main() {
 		gtk.MainQuit()
 	})
 	fileSubMenuItem.Append(fileExitSubMenuItem)
+	return menubar
+}
 
-	// end
-	window.Add(vbox)
-	window.SetSizeRequest(400, 200)
-	window.ShowAll()
+func createChatWindowMenubar(parent *gtk.Window, c *core.Core, contact *core.Contact) *gtk.MenuBar {
+	menubar := gtk.NewMenuBar()
+	optionMenuItem := gtk.NewMenuItemWithMnemonic("_Option")
+	menubar.Append(optionMenuItem)
 
-	gtk.Main()
+	optionSubMenuItem := gtk.NewMenu()
+	optionMenuItem.SetSubmenu(optionSubMenuItem)
+
+	optionAddContactSubMenuItem := gtk.NewMenuItemWithMnemonic("_Delete")
+	optionAddContactSubMenuItem.Connect("activate", func() {
+		fmt.Printf("Deleting %#v\n", contact)
+		err := c.DeleteContact(contact.ID)
+		if err != nil {
+			fmt.Printf("Unable to delete contact : %#v", err)
+			return
+		}
+		fmt.Printf("Contact %s deleted\n", contact.ID)
+		delete(chatBuffer, contact.ID)
+		parent.Destroy()
+	})
+	optionSubMenuItem.Append(optionAddContactSubMenuItem)
+
+	optionCloseContactSubMenuItem := gtk.NewMenuItemWithMnemonic("_Close")
+	optionCloseContactSubMenuItem.Connect("activate", func() {
+		parent.Destroy()
+	})
+	optionSubMenuItem.Append(optionCloseContactSubMenuItem)
+
+	return menubar
 }
 
 // createChatWindow
@@ -174,33 +206,7 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 	vbox := gtk.NewVBox(false, 1)
 	chatWindow.Add(vbox)
 
-	menubar := gtk.NewMenuBar()
-	optionMenuItem := gtk.NewMenuItemWithMnemonic("_Option")
-	menubar.Append(optionMenuItem)
-
-	optionSubMenuItem := gtk.NewMenu()
-	optionMenuItem.SetSubmenu(optionSubMenuItem)
-
-	optionAddContactSubMenuItem := gtk.NewMenuItemWithLabel("Delete")
-	optionAddContactSubMenuItem.Connect("activate", func() {
-		fmt.Printf("Deleting %#v\n", contact)
-		err := c.DeleteContact(contact.ID)
-		if err != nil {
-			fmt.Printf("Unable to delete contact : %#v", err)
-			return
-		}
-		fmt.Printf("Contact %s deleted\n", contact.ID)
-		delete(chatBuffer, contact.ID)
-		chatWindow.Destroy()
-	})
-	optionSubMenuItem.Append(optionAddContactSubMenuItem)
-
-	optionCloseContactSubMenuItem := gtk.NewMenuItemWithLabel("Close")
-	optionCloseContactSubMenuItem.Connect("activate", func() {
-		chatWindow.Destroy()
-	})
-	optionSubMenuItem.Append(optionCloseContactSubMenuItem)
-
+	menubar := createChatWindowMenubar(chatWindow, c, contact)
 	vbox.PackStart(menubar, false, false, 0)
 
 	vpaned := gtk.NewVPaned()
@@ -214,7 +220,10 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 	textView := gtk.NewTextViewWithBuffer(*textViewBuffer)
 	textView.SetEditable(false)
 	textView.SetSizeRequest(680, 480)
-	vpaned.Add(textView)
+
+	scrolledTextView := gtk.NewScrolledWindow(nil, nil)
+	scrolledTextView.Add(textView)
+	vpaned.Add(scrolledTextView)
 
 	hpaned := gtk.NewHPaned()
 	vpaned.Add(hpaned)
@@ -229,8 +238,8 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 
 	sendButton := gtk.NewButtonWithMnemonic("_send")
 	sendButton.Connect("clicked", func() {
-		// TODO : dont send empty text
-		outMsg := ""
+		var tvIter gtk.TextIter
+		textViewBuffer.GetEndIter(&tvIter)
 
 		// create payload to send
 		ptype := payload.Payload_MSG
@@ -240,15 +249,12 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 		}
 		err := contact.WriteEncryptedPayload(p)
 		if err != nil {
-			outMsg = fmt.Sprintf("Error : %s\n", err.Error())
-		} else {
-			outMsg = fmt.Sprintf("%s : %s\n", c.Node.Identity.Pretty(), textEntry.GetText())
+			textViewBuffer.Insert(&tvIter, fmt.Sprintf("Error : %s\n", err.Error()))
+			textEntry.SetText("")
+			return
 		}
 
-		var tvIter gtk.TextIter
-		textViewBuffer.GetEndIter(&tvIter)
-		textViewBuffer.Insert(&tvIter, outMsg)
-
+		textViewBuffer.Insert(&tvIter, fmt.Sprintf("%s : %s\n", c.Node.Identity.Pretty(), textEntry.GetText()))
 		textEntry.SetText("")
 	})
 	hpaned.Add(sendButton)
