@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	floodsub "github.com/libp2p/go-floodsub"
 	"github.com/mattn/go-gtk/gdk"
 	"github.com/olebedev/emitter"
 	"github.com/q6r/umbra/core"
@@ -18,6 +17,8 @@ import (
 	"github.com/mattn/go-gtk/gdkpixbuf"
 	"github.com/mattn/go-gtk/glib"
 	"github.com/mattn/go-gtk/gtk"
+
+	floodsub "gx/ipfs/QmUUSLfvihARhCxxgnjW4hmycJpPvzNu12Aaz6JWVdfnLg/go-libp2p-floodsub"
 )
 
 // chatBuffer is used to keep record of [contact.ID] -> chat buffer
@@ -37,14 +38,17 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer cancel()
-	defer func() { // TODO : handle errors
+	defer func() {
+		cancel()
 		err := c.Save()
 		if err != nil {
-			fmt.Printf("Unable to save core state\n")
+			fmt.Printf("Unable to save state\n")
+		}
+		err = c.Close()
+		if err != nil {
+			fmt.Printf("Unable to closed core\n")
 		}
 	}()
-	defer c.Close() // TODO : handle errors
 
 	gtk.Init(&os.Args)
 	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
@@ -85,7 +89,11 @@ func main() {
 		if strings.Contains(event.OriginalTopic, "contact:") {
 			updateContactStore(c, contactStore)
 		} else if strings.Contains(event.OriginalTopic, "message:recieved") {
-			msg := event.Args[0].(floodsub.Message) // TODO : check casting if ok
+			msg, ok := event.Args[0].(floodsub.Message)
+			if !ok {
+				fmt.Printf("Error event is not a message : %#v\n", event.Args[0])
+				return
+			}
 			outMsg := fmt.Sprintf("%s : %s\n", msg.GetFrom().Pretty(), string(msg.GetData()))
 
 			buffer, ok := chatBuffer[msg.GetFrom().Pretty()]
@@ -166,13 +174,11 @@ func createChatWindowMenubar(parent *gtk.Window, c *core.Core, contact *core.Con
 
 	optionAddContactSubMenuItem := gtk.NewMenuItemWithMnemonic("_Delete")
 	optionAddContactSubMenuItem.Connect("activate", func() {
-		fmt.Printf("Deleting %#v\n", contact)
 		err := c.DeleteContact(contact.ID)
 		if err != nil {
-			fmt.Printf("Unable to delete contact : %#v", err)
+			fmt.Printf("Error : Unable to remove contact : %#v\n", err)
 			return
 		}
-		fmt.Printf("Contact %s deleted\n", contact.ID)
 		delete(chatBuffer, contact.ID)
 		parent.Destroy()
 	})
