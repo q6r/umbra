@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"github.com/olebedev/emitter"
 	"context"
 	"flag"
 	"fmt"
@@ -10,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/mattn/go-gtk/gdk"
-	"github.com/olebedev/emitter"
 	"github.com/q6r/umbra/core"
 	"github.com/q6r/umbra/core/payload"
 
@@ -23,6 +24,7 @@ import (
 
 // chatBuffer is used to keep record of [contact.ID] -> chat buffer
 var chatBuffer = make(map[string]*gtk.TextBuffer)
+var contactStatus = make(map[string]bool)
 
 var repoPath = flag.String("repo", "/tmp/.ipfs", "The repository path")
 
@@ -30,20 +32,117 @@ func init() {
 	flag.Parse()
 }
 
+func processContactAdd(event *emitter.Event, c *core.Core, contactStore *gtk.TreeStore) error {
+	fmt.Printf("contact:add\n")
+	contact, ok := event.Args[0].(*core.Contact)
+	if !ok {
+		return fmt.Errorf("Erro event is not a contact : %#v\n", event.Args[0])
+	}
+
+	// if the contact doesn't have a chat buffer create one!
+	_, ok = chatBuffer[contact.ID]
+	if !ok {
+		fmt.Printf("No chat buffer found\n creating one\n")
+		chatBuffer[contact.ID] = gtk.NewTextBuffer(gtk.NewTextTagTable())
+	}
+
+	updateContactStore(c, contactStore) // has ui effect
+
+	return nil
+}
+
+func processContactDelete(event *emitter.Event, c *core.Core, contactStore *gtk.TreeStore) error {
+	contact, ok := event.Args[0].(*core.Contact)
+	if !ok {
+		return fmt.Errorf("Erro event is not a contact : %#v\n", event.Args[0])
+	}
+
+	if contact == nil {
+		return fmt.Errorf("nil contact passed\n")
+	}
+
+	delete(chatBuffer, contact.ID)
+
+	updateContactStore(c, contactStore) // has ui effect!
+
+	return nil
+}
+
+func processMessageRecieved(event *emitter.Event, c *core.Core) error {
+	msg, ok := event.Args[0].(floodsub.Message)
+	if !ok {
+		return fmt.Errorf("Error event is not a message : %#v\n", event.Args[0])
+	}
+	outMsg := fmt.Sprintf("%s : %s\n", msg.GetFrom().Pretty(), string(msg.GetData()))
+
+	// update the chat buffer
+	buffer, ok := chatBuffer[msg.GetFrom().Pretty()]
+	if !ok {
+		return fmt.Errorf("Error : not chat buffer found!!!!\n")
+	}
+	fmt.Printf("Updating the buffer %#v\n", buffer)
+	var tvIter gtk.TextIter
+	buffer.GetEndIter(&tvIter)
+	buffer.Insert(&tvIter, outMsg)
+
+	// TODO : set notification
+	return nil
+}
+
+func processContactStatus(event *emitter.Event, c *core.Core, contactStore *gtk.TreeStore) error {
+	contact, ok := event.Args[0].(*core.Contact)
+	if !ok {
+		return fmt.Errorf("Error event is not a contact : %#v\n", event.Args[0])
+	}
+	if contact == nil {
+		return fmt.Errorf("Error Contact provided is nil!\n")
+	}
+
+	status := strings.Contains(event.OriginalTopic, "contact:online")
+	if status == true {
+		contactStatus[contact.ID] = true
+	} else {
+		delete(contactStatus, contact.ID)
+	}
+
+	updateContactStore(c, contactStore) // has ui effect
+
+	return nil
+}
+
+// TODO : handle errors
+func processEvent(event *emitter.Event, c *core.Core, contactStore *gtk.TreeStore) error {
+		fmt.Printf("Processing event %#v\n", event)
+
+		if strings.Contains(event.OriginalTopic, "contact:add") {
+			return processContactAdd(event, c, contactStore)
+		} else if strings.Contains(event.OriginalTopic, "contact:delete") {
+			return processContactDelete(event, c, contactStore)
+		} else if strings.Contains(event.OriginalTopic, "message:recieved") {
+			return processMessageRecieved(event, c)
+		} else if strings.Contains(event.OriginalTopic, "contact:online") || strings.Contains(event.OriginalTopic, "contact:offline") {
+			return processContactStatus(event, c, contactStore)
+		}
+
+		return errors.New("Unhandled event")
+}
+
 func main() {
 	runtime.LockOSThread()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, _ := context.WithCancel(context.Background())
 	c, err := core.New(ctx, *repoPath)
 	if err != nil {
 		panic(err)
 	}
 	defer func() {
-		cancel()
 		err := c.Save()
 		if err != nil {
 			fmt.Printf("Unable to save state\n")
 		}
+
+		//cancel()
+
 		err = c.Close()
 		if err != nil {
 			fmt.Printf("Unable to closed core\n")
@@ -63,7 +162,7 @@ func main() {
 	//--------------------------------
 	// Menubar
 	//--------------------------------
-	menubar := createMainMenubar(c)
+	menubar := createMainMenubar(window, c)
 	vbox.PackStart(menubar, false, false, 0)
 
 	//--------------------------------
@@ -82,43 +181,18 @@ func main() {
 	treeview := gtk.NewTreeView()
 	contactList.Add(treeview)
 
-	treeview.SetModel(contactStore.ToTreeModel())
-	treeview.AppendColumn(gtk.NewTreeViewColumnWithAttributes("List", gtk.NewCellRendererText(), "text", 1))
-
-	c.Events.On("*", func(event *emitter.Event) {
-		if strings.Contains(event.OriginalTopic, "contact:") {
-			updateContactStore(c, contactStore)
-		} else if strings.Contains(event.OriginalTopic, "message:recieved") {
-			msg, ok := event.Args[0].(floodsub.Message)
-			if !ok {
-				fmt.Printf("Error event is not a message : %#v\n", event.Args[0])
-				return
-			}
-			outMsg := fmt.Sprintf("%s : %s\n", msg.GetFrom().Pretty(), string(msg.GetData()))
-
-			buffer, ok := chatBuffer[msg.GetFrom().Pretty()]
-			if !ok {
-				fmt.Printf("Error : not chat buffer found!!!!\n")
-				return
-			}
-
-			// update the chat buffer
-			fmt.Printf("Updating the buffer %#v\n", buffer)
-			var tvIter gtk.TextIter
-			buffer.GetEndIter(&tvIter)
-			buffer.Insert(&tvIter, outMsg)
-
-			// TODO : set notification
-
-		} else {
-			fmt.Printf("event = %#v\n", event)
-		}
-	})
 	err = c.Load()
 	if err != nil {
 		fmt.Printf("Unable to reload core : %s", err.Error())
 	}
+	for _, contact := range c.Contacts {
+		chatBuffer[contact.ID] = gtk.NewTextBuffer(gtk.NewTextTagTable())
+	}
 	updateContactStore(c, contactStore)
+
+	treeview.SetModel(contactStore.ToTreeModel())
+	treeview.AppendColumn(gtk.NewTreeViewColumnWithAttributes("Status", gtk.NewCellRendererPixbuf(), "pixbuf", 0))
+	treeview.AppendColumn(gtk.NewTreeViewColumnWithAttributes("List", gtk.NewCellRendererText(), "text", 1))
 
 	treeview.Connect("row_activated", func() {
 		var path *gtk.TreePath
@@ -127,7 +201,8 @@ func main() {
 
 		contactIndex, err := strconv.Atoi(path.String())
 		if err != nil {
-			panic(err)
+			fmt.Printf("Unable to convert '%#v' to integer\n", path.String())
+			return
 		}
 		contact := c.Contacts[contactIndex]
 
@@ -139,10 +214,25 @@ func main() {
 	window.SetSizeRequest(400, 200)
 	window.ShowAll()
 
+
+	// Run the event catcher threads
+	glib.IdleAdd(func() bool {
+		c.Events.On("*", func(event *emitter.Event) {
+			glib.IdleAdd(func() bool {
+				err := processEvent(event, c, contactStore)
+				if err != nil {
+					fmt.Printf("processEvent : %#v\n", err)
+					return false
+				}
+				return false
+			})
+		})
+		return false
+	})
 	gtk.Main()
 }
 
-func createMainMenubar(c *core.Core) *gtk.MenuBar {
+func createMainMenubar(parent *gtk.Window, c *core.Core) *gtk.MenuBar {
 	menubar := gtk.NewMenuBar()
 	fileMenuItem := gtk.NewMenuItemWithMnemonic("_File")
 	menubar.Append(fileMenuItem)
@@ -158,7 +248,7 @@ func createMainMenubar(c *core.Core) *gtk.MenuBar {
 
 	fileExitSubMenuItem := gtk.NewMenuItemWithMnemonic("E_xit")
 	fileExitSubMenuItem.Connect("activate", func() {
-		gtk.MainQuit()
+		parent.Destroy()
 	})
 	fileSubMenuItem.Append(fileExitSubMenuItem)
 	return menubar
@@ -181,6 +271,7 @@ func createChatWindowMenubar(parent *gtk.Window, c *core.Core, contact *core.Con
 		}
 		delete(chatBuffer, contact.ID)
 		parent.Destroy()
+		// TODO : Shouldn't update the contactStore
 	})
 	optionSubMenuItem.Append(optionAddContactSubMenuItem)
 
@@ -220,8 +311,10 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 
 	textViewBuffer, ok := chatBuffer[contact.ID]
 	if !ok {
-		fmt.Printf("FATAL ERROR : not chatbufefr for %#v", contact.ID)
+		fmt.Printf("FATAL ERROR : no chat buffer for %#v", contact.ID)
+		chatBuffer[contact.ID] = gtk.NewTextBuffer(gtk.NewTextTagTable())
 	}
+	textViewBuffer = chatBuffer[contact.ID]
 
 	textView := gtk.NewTextViewWithBuffer(*textViewBuffer)
 	textView.SetEditable(false)
@@ -247,6 +340,12 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 		var tvIter gtk.TextIter
 		textViewBuffer.GetEndIter(&tvIter)
 
+		textViewBuffer, ok = chatBuffer[contact.ID]
+		if !ok {
+			fmt.Printf("Trying to send into an invalid buffer\n")
+			return
+		}
+
 		// create payload to send
 		ptype := payload.Payload_MSG
 		p := payload.Payload{
@@ -255,12 +354,11 @@ func createChatWindow(window *gtk.Window, c *core.Core, contact *core.Contact) {
 		}
 		err := contact.WriteEncryptedPayload(p)
 		if err != nil {
+			fmt.Printf("Error while sending message : %#v\n", err)
 			textViewBuffer.Insert(&tvIter, fmt.Sprintf("Error : %s\n", err.Error()))
-			textEntry.SetText("")
-			return
+		} else {
+			textViewBuffer.Insert(&tvIter, fmt.Sprintf("%s : %s\n", c.Node.Identity.Pretty(), textEntry.GetText()))
 		}
-
-		textViewBuffer.Insert(&tvIter, fmt.Sprintf("%s : %s\n", c.Node.Identity.Pretty(), textEntry.GetText()))
 		textEntry.SetText("")
 	})
 	hpaned.Add(sendButton)
@@ -316,16 +414,16 @@ func updateContactStore(c *core.Core, contactStore *gtk.TreeStore) {
 	contactStore.Clear()
 	for _, contact := range c.Contacts {
 
-		// if the contact doesn't have a chat buffer create one!
-		_, ok := chatBuffer[contact.ID]
-		if !ok {
-			textViewTagTable := gtk.NewTextTagTable()
-			textViewBuffer := gtk.NewTextBuffer(textViewTagTable)
-			chatBuffer[contact.ID] = textViewBuffer
+		stock_id := gtk.STOCK_DISCONNECT
+		status, ok := contactStatus[contact.ID];
+		if ok && status == true {
+			stock_id = gtk.STOCK_CONNECT
 		}
 
 		var iter1 gtk.TreeIter
 		contactStore.Append(&iter1, nil)
-		contactStore.Set(&iter1, nil, contact.ID)
+		contactStore.Set(&iter1,
+			gtk.NewImage().RenderIcon(stock_id, gtk.ICON_SIZE_SMALL_TOOLBAR, "").GPixbuf,
+			contact.ID)
 	}
 }
