@@ -202,8 +202,12 @@ func (c *Contact) WritePayload(p payload.Payload) error {
 
 func (c *Contact) write(data []byte) error {
 	// TODO : assert topic is valid ???
+	err := c.parent.Node.Floodsub.Publish(c.topicOut, data)
+	if err != nil {
+		return err
+	}
 	c.parent.Events.Emit("message:sent", data)
-	return c.parent.Node.Floodsub.Publish(c.topicOut, data)
+	return nil
 }
 
 // Info returns the user info by querying dht

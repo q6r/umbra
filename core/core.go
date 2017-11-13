@@ -16,6 +16,7 @@ import (
 	"errors"
 	"os"
 	"fmt"
+	"time"
 
 	"github.com/ipfs/go-ipfs/core"
 	"github.com/ipfs/go-ipfs/repo"
@@ -46,7 +47,7 @@ func New(ctx context.Context, path string) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.Events = emitter.New(64)
+	c.Events = emitter.New(1024)
 
 	// Initialize repo
 	err = c.initRepo()
@@ -74,7 +75,23 @@ func New(ctx context.Context, path string) (*Core, error) {
 		return nil, err
 	}
 
+	go c.contactStatus()
+
 	return c, nil
+}
+
+// contactStatus emit event on the status of contacts
+func (c *Core) contactStatus() {
+	for {
+		time.Sleep(4 * time.Second)
+		for _, contact := range c.Contacts {
+			if contact.IsOnline() == true {
+				c.Events.Emit("contact:online", contact)
+			} else {
+				c.Events.Emit("contact:offline", contact)
+			}
+		}
+	}
 }
 
 func (c *Core) Decrypt(encryptedAesKey []byte, cipherData []byte) ([]byte, error) {
