@@ -19,6 +19,14 @@ import (
 	floodsub "gx/ipfs/QmUUSLfvihARhCxxgnjW4hmycJpPvzNu12Aaz6JWVdfnLg/go-libp2p-floodsub"
 )
 
+type State struct {
+	c          *core.Core
+	targetID   string
+	toAddContact      []byte
+	chatInput  map[string][]byte
+	chatOutput map[string][]byte
+}
+
 const (
 	winWidth  = 400
 	winHeight = 500
@@ -34,47 +42,37 @@ func init() {
 	flag.Parse()
 }
 
-type GUI struct {
-	c       *core.Core
-	targetID   string
-	toAddContact      []byte
-	chatInput  map[string][]byte
-	chatOutput map[string][]byte
-}
-
-var gui *GUI = nil
-
 func main() {
 
 	var err error
-	gui = &GUI{}
-	gui.targetID = ""
-	gui.chatInput = make(map[string][]byte)
-	gui.chatOutput = make(map[string][]byte)
-	gui.toAddContact = make([]byte, 256)
+	state := &State{}
+	state.targetID = ""
+	state.chatInput = make(map[string][]byte)
+	state.chatOutput = make(map[string][]byte)
+	state.toAddContact = make([]byte, 256)
 
-	gui.c, err = core.New(context.Background(), *repoPath)
+	state.c, err = core.New(context.Background(), *repoPath)
 	if err != nil {
 		panic(err)
 	}
 
-	err = gui.c.Load()
+	err = state.c.Load()
 	if err != nil {
 		fmt.Printf("Unable to load program state\n")
 	}
 	defer func() {
 		fmt.Printf("Saving program state\n")
-		err := gui.c.Save()
+		err := state.c.Save()
 		if err != nil {
 			fmt.Printf("Unable to save program state : %#v\n", err)
 		}
-		err = gui.c.Close()
+		err = state.c.Close()
 		if err != nil {
 			fmt.Printf("Unable to close program : %#v\n", err)
 		}
 	}()
 
-	gui.c.Events.On("*", func(event *emitter.Event) {
+	state.c.Events.On("*", func(event *emitter.Event) {
 
 		if strings.Contains(event.OriginalTopic, "message:recieved") {
 			msg, ok := event.Args[0].(floodsub.Message)
@@ -83,10 +81,10 @@ func main() {
 				return
 			}
 
-			if _, ok := gui.chatOutput[msg.GetFrom().Pretty()]; !ok {
-				gui.chatOutput[msg.GetFrom().Pretty()] = make([]byte, 32000)
+			if _, ok := state.chatOutput[msg.GetFrom().Pretty()]; !ok {
+				state.chatOutput[msg.GetFrom().Pretty()] = make([]byte, 32000)
 			}
-			gui.chatOutput[msg.GetFrom().Pretty()] = appenderNewLine(gui.chatOutput[msg.GetFrom().Pretty()],
+			state.chatOutput[msg.GetFrom().Pretty()] = appenderNewLine(state.chatOutput[msg.GetFrom().Pretty()],
 				[]byte(fmt.Sprintf("<%s:him> %s", time.Now().Format("2006-01-02 15:04:05"), string(msg.GetData()))))
 		}
 
@@ -136,7 +134,6 @@ func main() {
 		<-doneC
 	})
 
-	state := &State{}
 	fpsTicker := time.NewTicker(time.Second / 30)
 	for {
 		select {
@@ -171,30 +168,30 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 		nk.NkLayoutRowDynamic(ctx, float32(height), 1)
 		{
 			// ContactListView
-			if len(gui.targetID) == 0 {
+			if len(state.targetID) == 0 {
 				if nk.NkGroupBegin(ctx, "List", 0) > 0 {
 					nk.NkLayoutRowDynamic(ctx, 25, 1)
 					{
 						// Adding contact area
 						nk.NkLayoutRowDynamic(ctx, 25, 2)
 						{
-							if nk.NkEditStringZeroTerminated(ctx, nk.EditField, gui.toAddContact, 256, nk.NkFilterAscii) > 0 {
+							if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.toAddContact, 256, nk.NkFilterAscii) > 0 {
 							}
 
 							if nk.NkButtonLabel(ctx, "+") > 0 {
-								err := gui.c.AddContact(strings.TrimRight(string(gui.toAddContact), "\x00"))
+								err := state.c.AddContact(strings.TrimRight(string(state.toAddContact), "\x00"))
 								if err != nil {
 									fmt.Printf("Unable to add contact %s\n", err.Error())
 								}
-								gui.toAddContact[0] = 0
+								state.toAddContact[0] = 0
 							}
 						}
 						nk.NkLayoutRowDynamic(ctx, 25, 1)
 						{
 							// List area
-							for _, contact := range gui.c.Contacts {	
+							for _, contact := range state.c.Contacts {	
 								if nk.NkButtonLabel(ctx, contact.ID) > 0 {
-									gui.targetID = contact.ID
+									state.targetID = contact.ID
 								}
 							}
 						}
@@ -204,19 +201,19 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 			}
 
 			// ChatView
-			if len(gui.targetID) > 0 {
-				switch event := nk.NkGroupBegin(ctx, gui.targetID, nk.WindowTitle|nk.WindowMinimizable)
+			if len(state.targetID) > 0 {
+				switch event := nk.NkGroupBegin(ctx, state.targetID, nk.WindowTitle|nk.WindowMinimizable)
 				{
 				case event == 1:
 
 					nk.NkLayoutRowDynamic(ctx, 25, 1)
 					{
 						if nk.NkButtonLabel(ctx, "delete") > 0 {
-							err := gui.c.DeleteContact(gui.targetID)
+							err := state.c.DeleteContact(state.targetID)
 							if err != nil {
 								fmt.Printf("Unable to delete contact : %#v\n", err)
 							}
-							gui.targetID = ""
+							state.targetID = ""
 							// TODO : remove allocate buffers if exists...
 						}
 					}
@@ -224,33 +221,33 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 					nk.NkLayoutRowDynamic(ctx, float32(height)-100-25-25, 1)
 					{
 						// initalize buffers if not initialized
-						if _, ok := gui.chatOutput[gui.targetID]; !ok {
-							gui.chatOutput[gui.targetID] = make([]byte, 32000)
+						if _, ok := state.chatOutput[state.targetID]; !ok {
+							state.chatOutput[state.targetID] = make([]byte, 32000)
 						}
-						if nk.NkEditStringZeroTerminated(ctx, nk.EditMultiline, gui.chatOutput[gui.targetID], 32000, nk.NkFilterAscii) > 0 {
+						if nk.NkEditStringZeroTerminated(ctx, nk.EditMultiline, state.chatOutput[state.targetID], 32000, nk.NkFilterAscii) > 0 {
 
 						}
 					}
 					nk.NkLayoutRowDynamic(ctx, 25, 2)
 					{
 						// initalize buffers if not initialized
-						if _, ok := gui.chatInput[gui.targetID]; !ok {
-							gui.chatInput[gui.targetID] = make([]byte, 256)
+						if _, ok := state.chatInput[state.targetID]; !ok {
+							state.chatInput[state.targetID] = make([]byte, 256)
 						}
-						if nk.NkEditStringZeroTerminated(ctx, nk.EditField, gui.chatInput[gui.targetID], 256, nk.NkFilterAscii) > 0 {
+						if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.chatInput[state.targetID], 256, nk.NkFilterAscii) > 0 {
 
 						}
 						if nk.NkButtonLabel(ctx, "send") > 0 {
-							gui.chatOutput[gui.targetID] = appenderNewLine(gui.chatOutput[gui.targetID],
-								[]byte(fmt.Sprintf("<%s:me> %s", time.Now().Format("2006-01-02 15:04:05"), gui.chatInput[gui.targetID])))
+							state.chatOutput[state.targetID] = appenderNewLine(state.chatOutput[state.targetID],
+								[]byte(fmt.Sprintf("<%s:me> %s", time.Now().Format("2006-01-02 15:04:05"), state.chatInput[state.targetID])))
 							
 							// find the contact
-							for _, contact := range gui.c.Contacts {
-								if contact.ID == gui.targetID {
+							for _, contact := range state.c.Contacts {
+								if contact.ID == state.targetID {
 									ptype := payload.Payload_MSG
 									p := payload.Payload{
 										Type: &ptype,
-										Body: gui.chatInput[gui.targetID],
+										Body: state.chatInput[state.targetID],
 									}
 									err := contact.WriteEncryptedPayload(p)
 									if err != nil {
@@ -261,12 +258,12 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 								}
 							}
 
-							gui.chatInput[gui.targetID][0] = 0
+							state.chatInput[state.targetID][0] = 0
 						}
 					}
 					nk.NkGroupEnd(ctx)
 				case event == nk.WindowMinimized:
-					gui.targetID = ""
+					state.targetID = ""
 				default:
 					fmt.Printf("event = %d\n", event)
 				}
@@ -300,9 +297,6 @@ func appender(a []byte, b []byte) []byte {
 		return a
 	}
 	return append(a[:i], b...)[0:len(a)]
-}
-
-type State struct {
 }
 
 func onError(code int32, msg string) {
