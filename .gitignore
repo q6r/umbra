@@ -1,3 +1,2 @@
 core/payload/*.go
-gtk/gtk
 nk/nk
