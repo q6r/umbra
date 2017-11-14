@@ -18,10 +18,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ipfs/go-ipfs/core"
-	"github.com/ipfs/go-ipfs/repo"
-	"github.com/ipfs/go-ipfs/repo/config"
-	"github.com/ipfs/go-ipfs/repo/fsrepo"
+	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo"
+	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo/config"
+	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo/fsrepo"
+	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/core"
 	peer "gx/ipfs/QmXYjuNuxVzXKJCfWasQk1RqkhVLDM9jtUKhqc2WPQmFSB/go-libp2p-peer"
 	ic "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 )

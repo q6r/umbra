@@ -8,6 +8,11 @@
   },
   "gxDependencies": [
     {
+      "hash": "QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9",
+      "name": "go-ipfs",
+      "version": "0.4.13-dev"
+    },
+    {
       "hash": "QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52",
       "name": "go-log",
       "version": "1.2.0"
