@@ -29,6 +29,7 @@ var contactStatus = make(map[string]bool)
 var repoPath = flag.String("repo", "/tmp/.ipfs", "The repository path")
 
 func init() {
+	runtime.LockOSThread()
 	flag.Parse()
 }
 
@@ -99,13 +100,10 @@ func processContactStatus(event *emitter.Event, c *core.Core, contactStore *gtk.
 	}
 
 	status := strings.Contains(event.OriginalTopic, "contact:online")
-	if status == true {
-		contactStatus[contact.ID] = true
-	} else {
-		delete(contactStatus, contact.ID)
+	if contactStatus[contact.ID] != status {
+		contactStatus[contact.ID] = status
+		updateContactStore(c, contactStore) // has ui effect
 	}
-
-	updateContactStore(c, contactStore) // has ui effect
 
 	return nil
 }
@@ -128,8 +126,6 @@ func processEvent(event *emitter.Event, c *core.Core, contactStore *gtk.TreeStor
 }
 
 func main() {
-	runtime.LockOSThread()
-
 	ctx, _ := context.WithCancel(context.Background())
 	c, err := core.New(ctx, *repoPath)
 	if err != nil {
@@ -181,15 +177,6 @@ func main() {
 	treeview := gtk.NewTreeView()
 	contactList.Add(treeview)
 
-	err = c.Load()
-	if err != nil {
-		fmt.Printf("Unable to reload core : %s", err.Error())
-	}
-	for _, contact := range c.Contacts {
-		chatBuffer[contact.ID] = gtk.NewTextBuffer(gtk.NewTextTagTable())
-	}
-	updateContactStore(c, contactStore)
-
 	treeview.SetModel(contactStore.ToTreeModel())
 	treeview.AppendColumn(gtk.NewTreeViewColumnWithAttributes("Status", gtk.NewCellRendererPixbuf(), "pixbuf", 0))
 	treeview.AppendColumn(gtk.NewTreeViewColumnWithAttributes("List", gtk.NewCellRendererText(), "text", 1))
@@ -216,19 +203,26 @@ func main() {
 
 
 	// Run the event catcher threads
-	glib.IdleAdd(func() bool {
-		c.Events.On("*", func(event *emitter.Event) {
-			glib.IdleAdd(func() bool {
-				err := processEvent(event, c, contactStore)
-				if err != nil {
-					fmt.Printf("processEvent : %#v\n", err)
-					return false
-				}
-				return false
-			})
-		})
-		return false
+	// When idle get events and process
+	go glib.IdleAdd(func() bool {
+		event := <-c.Events.Once("*")
+		err := processEvent(&event, c, contactStore)
+		if err != nil {
+			fmt.Printf("Failed while processing event %#v\n", err)
+		}
+		fmt.Printf("Processed %#v\n", event)
+		return true
 	})
+
+	err = c.Load()
+	if err != nil {
+		fmt.Printf("Unable to reload core : %s", err.Error())
+	}
+	for _, contact := range c.Contacts {
+		chatBuffer[contact.ID] = gtk.NewTextBuffer(gtk.NewTextTagTable())
+	}
+	updateContactStore(c, contactStore)
+
 	gtk.Main()
 }
 
