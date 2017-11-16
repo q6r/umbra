@@ -1,27 +1,28 @@
 package core
 
 import (
-	"github.com/olebedev/emitter"
-	"github.com/gtank/cryptopasta"
-	"crypto/sha1"
-	"crypto/rand"
-	"unsafe"
-	"reflect"
-	"crypto/rsa"
-	"io/ioutil"
-	"encoding/json"
-	"path/filepath"
-	"github.com/phayes/freeport"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha1"
+	"encoding/json"
 	"errors"
-	"os"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"reflect"
 	"time"
+	"unsafe"
 
+	"github.com/gtank/cryptopasta"
+	"github.com/olebedev/emitter"
+	"github.com/phayes/freeport"
+
+	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/core"
 	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo"
 	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo/config"
 	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/repo/fsrepo"
-	"gx/ipfs/QmQ93GLTtkiHfoydHVsXJxERzxQsNp9BaQvKMF6ZKXCQt9/go-ipfs/core"
 	peer "gx/ipfs/QmXYjuNuxVzXKJCfWasQk1RqkhVLDM9jtUKhqc2WPQmFSB/go-libp2p-peer"
 	ic "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 )
@@ -31,11 +32,11 @@ var (
 )
 
 type Core struct {
-	Events *emitter.Emitter
-	Node *core.IpfsNode
-	Repo repo.Repo
-	RepoPath string
-	Contacts []*Contact
+	Events     *emitter.Emitter
+	Node       *core.IpfsNode
+	Repo       repo.Repo
+	RepoPath   string
+	Contacts   []*Contact
 	PrivateKey *rsa.PrivateKey
 }
 
@@ -61,7 +62,7 @@ func New(ctx context.Context, path string) (*Core, error) {
 		return nil, errors.New("Unable to initialize repo")
 	}
 
-	// Setup node	
+	// Setup node
 	err = c.setupNode(ctx)
 	if err != nil {
 		c.Repo.Close()
@@ -135,7 +136,7 @@ func (c *Core) GetPeerPublicRSAKey(ctx context.Context, idstr string) (*rsa.Publ
 func extractRSAPublicKey(pubkey ic.PubKey) (*rsa.PublicKey, error) {
 	rs := reflect.ValueOf(pubkey).Elem()
 	k := rs.FieldByName("k")
-	k  = reflect.NewAt(k.Type(), unsafe.Pointer(k.UnsafeAddr())).Elem()
+	k = reflect.NewAt(k.Type(), unsafe.Pointer(k.UnsafeAddr())).Elem()
 
 	pub, ok := k.Interface().(*rsa.PublicKey)
 	if !ok {
@@ -147,28 +148,28 @@ func extractRSAPublicKey(pubkey ic.PubKey) (*rsa.PublicKey, error) {
 
 // extractMyRSAPrivateKey extracts my key in the correct format
 func (c *Core) extractSelfRSAPrivateKey() (*rsa.PrivateKey, error) {
-			privk, err := c.Node.GetKey("self")
-			if err != nil {
-				return nil, err
-			}
+	privk, err := c.Node.GetKey("self")
+	if err != nil {
+		return nil, err
+	}
 
-			rs := reflect.ValueOf(privk).Elem()
+	rs := reflect.ValueOf(privk).Elem()
 
-			sk := rs.FieldByName("sk")
-			sk = reflect.NewAt(sk.Type(), unsafe.Pointer(sk.UnsafeAddr())).Elem()
+	sk := rs.FieldByName("sk")
+	sk = reflect.NewAt(sk.Type(), unsafe.Pointer(sk.UnsafeAddr())).Elem()
 
-			priv, ok := sk.Interface().(*rsa.PrivateKey)
-			if !ok {
-				return nil, errors.New("unable to cast")
-			}
+	priv, ok := sk.Interface().(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("unable to cast")
+	}
 
-			return priv, nil
+	return priv, nil
 }
 
 // Save the state of core
 // inside of ipfs repository
 func (c *Core) Save() error {
-	
+
 	// Marshal contacts
 	bcontacts, err := json.Marshal(c.Contacts)
 	if err != nil {
@@ -191,7 +192,7 @@ func (c *Core) Load() error {
 	if err != nil {
 		return err
 	}
-	
+
 	contacts := []Contact{}
 	err = json.Unmarshal(bcontacts, &contacts)
 	if err != nil {
@@ -242,7 +243,7 @@ func (c *Core) DeleteContact(id string) error {
 			break
 		}
 	}
-	
+
 	if found_index == -1 || found_contact == nil {
 		return errors.New("unable to delete, id doesn't exist")
 	}
@@ -257,7 +258,7 @@ func (c *Core) DeleteContact(id string) error {
 
 // Initialize the repo
 func (c *Core) initRepo() error {
-	
+
 	if c.RepoPath == "" {
 		return errors.New("empty repository provided")
 	}
@@ -266,7 +267,7 @@ func (c *Core) initRepo() error {
 		return errRepoExists
 	}
 
-	conf, err := config.Init(os.Stdout, 1024)
+	conf, err := config.Init(os.Stdout, 2048)
 	if err != nil {
 		return err
 	}
@@ -280,7 +281,7 @@ func (c *Core) initRepo() error {
 		return err
 	}
 
-	return  nil
+	return nil
 }
 
 func (c *Core) setupNode(ctx context.Context) error {
@@ -290,7 +291,7 @@ func (c *Core) setupNode(ctx context.Context) error {
 	cfg.Repo = c.Repo
 	cfg.Online = true
 	cfg.Permament = true
-	cfg.ExtraOpts = map[string]bool {
+	cfg.ExtraOpts = map[string]bool{
 		"pubsub": true,
 	}
 
@@ -299,7 +300,7 @@ func (c *Core) setupNode(ctx context.Context) error {
 		return err
 	}
 	err = c.Repo.SetConfigKey("Addresses.Swarm", []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", SwarmPort),
-	fmt.Sprintf("/ip6/::/tcp/%d", SwarmPort)})
+		fmt.Sprintf("/ip6/::/tcp/%d", SwarmPort)})
 	if err != nil {
 		return err
 	}
