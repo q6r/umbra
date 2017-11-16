@@ -106,8 +106,8 @@ func processEvents(state *State, event *emitter.Event) error {
 			if _, ok := state.chatOutput[msg.GetFrom().Pretty()]; !ok {
 				state.chatOutput[msg.GetFrom().Pretty()] = make([]byte, 32000)
 			}
-			state.chatOutput[msg.GetFrom().Pretty()] = appenderNewLine(state.chatOutput[msg.GetFrom().Pretty()],
-				[]byte(fmt.Sprintf("<%s:him> %s", time.Now().Format("2006-01-02 15:04:05"), string(msg.GetData()))))
+			o := []byte(fmt.Sprintf("<%s:him> %s\n", time.Now().Format("2006-01-02 15:04:05"), string(msg.GetData())))
+			state.chatOutput[msg.GetFrom().Pretty()] = prepend(o, state.chatOutput[msg.GetFrom().Pretty()])
 			return nil
 		} else if strings.Contains(event.OriginalTopic, "contact:online") {
 			contact, ok := event.Args[0].(*core.Contact)
@@ -279,11 +279,10 @@ func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 	}
 }
 
-func ViewChat(ctx *nk.Context, state *State, height float32) {
+func ViewChat(win *glfw.Window, ctx *nk.Context, state *State, height float32) {
 	switch event := nk.NkGroupBegin(ctx, state.targetID, nk.WindowTitle|nk.WindowMinimizable)
 	{
 	case event == 1:
-
 		nk.NkLayoutRowDynamic(ctx, 25, 1)
 		{
 			if nk.NkButtonLabel(ctx, "delete") > 0 {
@@ -305,7 +304,6 @@ func ViewChat(ctx *nk.Context, state *State, height float32) {
 			}
 			if nk.NkEditStringZeroTerminated(ctx, nk.EditMultiline,
 				state.chatOutput[state.targetID], 32000, nk.NkFilterAscii) > 0 {
-
 			}
 		}
 		nk.NkLayoutRowDynamic(ctx, 25, 2)
@@ -322,8 +320,8 @@ func ViewChat(ctx *nk.Context, state *State, height float32) {
 
 			sendEvent := nk.NkButtonLabel(ctx, "send")
 			if sendEvent > 0 {
-				o := []byte(fmt.Sprintf("<%s:me> %s", time.Now().Format("2006-01-02 15:04:05"), state.chatInput[state.targetID]))
-				state.chatOutput[state.targetID] = appenderNewLine(state.chatOutput[state.targetID], o)
+				o := []byte(fmt.Sprintf("<%s:me> %s\n", time.Now().Format("2006-01-02 15:04:05"), state.chatInput[state.targetID]))
+				state.chatOutput[state.targetID] = prepend(o, state.chatOutput[state.targetID])
 				
 				// find the contact
 				for _, contact := range state.c.Contacts {
@@ -368,7 +366,7 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 			case "contactList":
 				ViewContactList(win, ctx, state)
 			case "chat":
-				ViewChat(ctx, state, float32(height))
+				ViewChat(win, ctx, state, float32(height))
 			}
 		}
 	}
@@ -384,21 +382,20 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 	win.SwapBuffers()
 }
 
-func appenderNewLine(a []byte, b []byte) []byte {
-	return appender(appender(a, b), []byte{0x0a})
-}
+func prepend(a []byte, b []byte) []byte {
 
-func appender(a []byte, b []byte) []byte {
+	alen := 0
+	for alen = 0; a[alen] != 0; alen++ {
+
+	}
+	ares := make([]byte, alen+1)
 	i := 0
-	for i = 0; i < len(a); i++ {
-		if a[i] == 0 {
-			break;
-		}
+	for i = 0;i < alen; i++ {
+		ares[i] = a[i]
 	}
-	if i >= len(a) { // increase memory of a
-		return a
-	}
-	return append(a[:i], b...)[0:len(a)]
+	ares[i] = 0x0a	
+
+	return append(ares, b...)
 }
 
 func onError(code int32, msg string) {
