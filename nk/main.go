@@ -234,24 +234,30 @@ var rect = nk.NewRect()
 func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 	width, _ := win.GetSize()
 	statusWidth := float32(0.1)
+	addWidth    := float32(0.1)
 	onlineImage  := nk.NkImageId(int32(imageOnlineStatusID))
 	offlineImage := nk.NkImageId(int32(imageOfflineStatusID))
 
 	if nk.NkGroupBegin(ctx, "List", 0) > 0 {
 		// Adding contact area
-		nk.NkLayoutRowDynamic(ctx, 25, 2)
+		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
 		{
+			nk.NkLayoutRowPush(ctx, float32(width)*(1-addWidth)-float32(width)*addWidth)
 			if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.toAddContact, 256, nk.NkFilterAscii) > 0 {
 			}
 
-			if nk.NkButtonLabel(ctx, "+") > 0 {
-				err := state.c.AddContact(strings.TrimRight(string(state.toAddContact), "\x00"))
-				if err != nil {
-					fmt.Printf("Unable to add contact %s\n", err.Error())
+			nk.NkLayoutRowPush(ctx, float32(width)*addWidth)
+			{
+				if nk.NkButtonLabel(ctx, "+") > 0 {
+					err := state.c.AddContact(strings.TrimRight(string(state.toAddContact), "\x00"))
+					if err != nil {
+						fmt.Printf("Unable to add contact %s\n", err.Error())
+					}
+					state.toAddContact[0] = 0
 				}
-				state.toAddContact[0] = 0
 			}
 		}
+		nk.NkLayoutRowEnd(ctx)
 
 		// List area
 		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
@@ -265,7 +271,7 @@ func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 						nk.NkImage(ctx, offlineImage)
 					}
 				}
-				nk.NkLayoutRowPush(ctx, float32(width)*(1-statusWidth))
+				nk.NkLayoutRowPush(ctx, float32(width)*(1-statusWidth)-(float32(width)*statusWidth))
 				{
 					if nk.NkButtonLabel(ctx, contact.ID) > 0 {
 						state.targetID = contact.ID
@@ -275,8 +281,8 @@ func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 			}
 		}
 		nk.NkLayoutRowEnd(ctx)
-		nk.NkGroupEnd(ctx)
 	}
+	nk.NkGroupEnd(ctx)
 }
 
 func ViewChat(win *glfw.Window, ctx *nk.Context, state *State, height float32) {
