@@ -242,10 +242,18 @@ func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 		// Adding contact area
 		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
 		{
+			// Input area
 			nk.NkLayoutRowPush(ctx, float32(width)*(1-addWidth)-float32(width)*addWidth)
+			if nk.NkWidgetIsMouseClicked(ctx, nk.ButtonRight) > 0 {
+				clip, err := win.GetClipboardString()
+				if err == nil {
+					copy(state.toAddContact[:], []byte(clip))
+				}
+			}
 			if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.toAddContact, 256, nk.NkFilterAscii) > 0 {
 			}
 
+			// Add button
 			nk.NkLayoutRowPush(ctx, float32(width)*addWidth)
 			{
 				if nk.NkButtonLabel(ctx, "+") > 0 {
@@ -318,8 +326,12 @@ func ViewChat(win *glfw.Window, ctx *nk.Context, state *State, height float32) {
 			if _, ok := state.chatInput[state.targetID]; !ok {
 				state.chatInput[state.targetID] = make([]byte, 256)
 			}
-
-
+			if nk.NkWidgetIsMouseClicked(ctx, nk.ButtonRight) > 0 {
+				clip, err := win.GetClipboardString()
+				if err == nil {
+					copy(state.chatInput[state.targetID][:], []byte(clip))
+				}
+			}
 			if nk.NkEditStringZeroTerminated(ctx, nk.EditField,
 				state.chatInput[state.targetID], 256, nk.NkFilterAscii) > 0 {
 			}
