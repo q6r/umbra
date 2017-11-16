@@ -1,5 +1,3 @@
-P2P Encrypted IM uses IPFS
+# Umbra
 
-# Building
-
-See the wiki for information
+Umbra is an P2P Encrypted IM library and client(s). It relays on IPFS. Read the wiki for more information.
