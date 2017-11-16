@@ -1,6 +1,7 @@
 package main
 
 import (
+	"unsafe"
 	"github.com/q6r/umbra/core/payload"
 	"strings"
 	"github.com/olebedev/emitter"
@@ -23,6 +24,7 @@ type State struct {
 	c          *core.Core
 	targetID   string
 	toAddContact      []byte
+	isOnline   map[string]bool
 	chatInput  map[string][]byte
 	chatOutput map[string][]byte
 	view       string 				// contactList, chat, ...
@@ -43,6 +45,57 @@ func init() {
 	flag.Parse()
 }
 
+var imageOnlineStatusID      = uint32(40)
+var imageOfflineStatusID     = uint32(41)
+
+// TODO : glDeleteTextures(1, <textures>);
+// initializeStatusImage will builld the online/offline image textures
+func initializeStatusImages() {
+	imageOnlineStatusData    := make([]byte, 80*80*4)
+	imageOnlineStatusDataPtr := unsafe.Pointer(nil)
+	i := 0
+	for y := 0; y < 80; y++ {
+		for x := 0; x < 80; x++ {
+			imageOnlineStatusData[i + 0] = 255;
+			imageOnlineStatusData[i + 1] = 0;
+			imageOnlineStatusData[i + 2] = 255;
+			imageOnlineStatusData[i + 3] = 0;
+			i += 4;
+		}
+	}
+	imageOnlineStatusDataPtr = unsafe.Pointer(uintptr(unsafe.Pointer(&imageOnlineStatusData[0])) + unsafe.Sizeof(imageOnlineStatusData[0]))
+
+	gl.GenTextures(1, &imageOnlineStatusID)
+	gl.BindTexture(gl.TEXTURE_2D, imageOnlineStatusID)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 80, 80, 0, gl.RGBA, gl.UNSIGNED_BYTE, imageOnlineStatusDataPtr)
+
+	imageOfflineStatusData    := make([]byte, 80*80*4)
+	imageOfflineStatusDataPtr := unsafe.Pointer(nil)
+	i = 0
+	for y := 0; y < 80; y++ {
+		for x := 0; x < 80; x++ {
+			imageOfflineStatusData[i + 0] = 255;
+			imageOfflineStatusData[i + 1] = 255;
+			imageOfflineStatusData[i + 2] = 0;
+			imageOfflineStatusData[i + 3] = 0;
+			i += 4;
+		}
+	}
+	imageOfflineStatusDataPtr = unsafe.Pointer(uintptr(unsafe.Pointer(&imageOfflineStatusData[0])) + unsafe.Sizeof(imageOfflineStatusData[0]))
+
+	gl.GenTextures(1, &imageOfflineStatusID)
+	gl.BindTexture(gl.TEXTURE_2D, imageOfflineStatusID)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 80, 80, 0, gl.RGBA, gl.UNSIGNED_BYTE, imageOfflineStatusDataPtr)
+}
+
 func processEvents(state *State, event *emitter.Event) error {
 		if strings.Contains(event.OriginalTopic, "message:recieved") {
 			msg, ok := event.Args[0].(floodsub.Message)
@@ -56,6 +109,18 @@ func processEvents(state *State, event *emitter.Event) error {
 			state.chatOutput[msg.GetFrom().Pretty()] = appenderNewLine(state.chatOutput[msg.GetFrom().Pretty()],
 				[]byte(fmt.Sprintf("<%s:him> %s", time.Now().Format("2006-01-02 15:04:05"), string(msg.GetData()))))
 			return nil
+		} else if strings.Contains(event.OriginalTopic, "contact:online") {
+			contact, ok := event.Args[0].(*core.Contact)
+			if !ok {
+				return fmt.Errorf("event is not a contact : %#v", event.Args)
+			}
+			state.isOnline[contact.ID] = true
+		} else if strings.Contains(event.OriginalTopic, "contact:offline") {
+			contact, ok := event.Args[0].(*core.Contact)
+			if !ok {
+				return fmt.Errorf("event is not a contact : %#v", event.Args)
+			}
+			state.isOnline[contact.ID] = false
 		}
 
 		return nil
@@ -69,6 +134,7 @@ func main() {
 	state.view         = "contactList"
 	state.chatInput    = make(map[string][]byte)
 	state.chatOutput   = make(map[string][]byte)
+	state.isOnline     = make(map[string]bool)
 	state.toAddContact = make([]byte, 256)
 
 	state.c, err = core.New(context.Background(), *repoPath)
@@ -140,6 +206,8 @@ func main() {
 		<-doneC
 	})
 
+	initializeStatusImages()
+
 	fpsTicker := time.NewTicker(time.Second / 30)
 	for {
 		select {
@@ -163,7 +231,7 @@ func main() {
 var commandBuffer = nk.NewCommandBuffer()
 var rect = nk.NewRect()
 
-func ViewContactList(ctx *nk.Context, state *State) {
+func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 	if nk.NkGroupBegin(ctx, "List", 0) > 0 {
 		nk.NkLayoutRowDynamic(ctx, 25, 1)
 		{
@@ -181,16 +249,35 @@ func ViewContactList(ctx *nk.Context, state *State) {
 					state.toAddContact[0] = 0
 				}
 			}
-			nk.NkLayoutRowDynamic(ctx, 25, 1)
+
+			width, _ := win.GetSize()
+			statusWidth := float32(0.1)
+
+			onlineImage  := nk.NkImageId(int32(imageOnlineStatusID))
+			offlineImage := nk.NkImageId(int32(imageOfflineStatusID))
+
+			// List area
+			nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
 			{
-				// List area
 				for _, contact := range state.c.Contacts {	
-					if nk.NkButtonLabel(ctx, contact.ID) > 0 {
-						state.targetID = contact.ID
-						state.view = "chat"
+					nk.NkLayoutRowPush(ctx, float32(width)*statusWidth)
+					{
+						if state.isOnline[contact.ID] {
+							nk.NkImage(ctx, onlineImage)
+						} else {
+							nk.NkImage(ctx, offlineImage)
+						}
+					}
+					nk.NkLayoutRowPush(ctx, float32(width)*(1-statusWidth))
+					{
+						if nk.NkButtonLabel(ctx, contact.ID) > 0 {
+							state.targetID = contact.ID
+							state.view = "chat"
+						}
 					}
 				}
 			}
+			/////
 		}
 		nk.NkGroupEnd(ctx)
 	}
@@ -274,10 +361,9 @@ func gfxMain(win *glfw.Window, ctx *nk.Context, state *State) {
 	if nk.NkBegin(ctx, "Contacts", nk.NkRect(0, 0, float32(width), float32(height)), nk.WindowTitle) > 0 {
 		nk.NkLayoutRowDynamic(ctx, float32(height), 1)
 		{
-
 			switch state.view {
 			case "contactList":
-				ViewContactList(ctx, state)
+				ViewContactList(win, ctx, state)
 			case "chat":
 				ViewChat(ctx, state, float32(height))
 			}
