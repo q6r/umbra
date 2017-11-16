@@ -47,7 +47,7 @@ func New(ctx context.Context, path string) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.Events = emitter.New(2048)
+	c.Events = emitter.New(1024)
 
 	// Initialize repo
 	err = c.initRepo()
