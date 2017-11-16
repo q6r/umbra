@@ -240,10 +240,20 @@ func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
 
 	if nk.NkGroupBegin(ctx, "List", 0) > 0 {
 		// Adding contact area
-		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
+		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 3)
 		{
+			// Copy my ID
+			nk.NkLayoutRowPush(ctx, float32(width)*addWidth)
+			{
+				if nk.NkButtonLabel(ctx, "Copy ID") > 0 {
+					id := state.c.Node.Identity.Pretty()
+					win.SetClipboardString(id)
+				}
+			}
+
+
 			// Input area
-			nk.NkLayoutRowPush(ctx, float32(width)*(1-addWidth)-float32(width)*addWidth)
+			nk.NkLayoutRowPush(ctx, float32(width)*(1-addWidth)- (float32(width)*addWidth)*2)
 			if nk.NkWidgetIsMouseClicked(ctx, nk.ButtonRight) > 0 {
 				clip, err := win.GetClipboardString()
 				if err == nil {
