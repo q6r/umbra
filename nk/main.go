@@ -232,53 +232,49 @@ var commandBuffer = nk.NewCommandBuffer()
 var rect = nk.NewRect()
 
 func ViewContactList(win *glfw.Window, ctx *nk.Context, state *State) {
+	width, _ := win.GetSize()
+	statusWidth := float32(0.1)
+	onlineImage  := nk.NkImageId(int32(imageOnlineStatusID))
+	offlineImage := nk.NkImageId(int32(imageOfflineStatusID))
+
 	if nk.NkGroupBegin(ctx, "List", 0) > 0 {
-		nk.NkLayoutRowDynamic(ctx, 25, 1)
+		// Adding contact area
+		nk.NkLayoutRowDynamic(ctx, 25, 2)
 		{
-			// Adding contact area
-			nk.NkLayoutRowDynamic(ctx, 25, 2)
-			{
-				if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.toAddContact, 256, nk.NkFilterAscii) > 0 {
-				}
-
-				if nk.NkButtonLabel(ctx, "+") > 0 {
-					err := state.c.AddContact(strings.TrimRight(string(state.toAddContact), "\x00"))
-					if err != nil {
-						fmt.Printf("Unable to add contact %s\n", err.Error())
-					}
-					state.toAddContact[0] = 0
-				}
+			if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.toAddContact, 256, nk.NkFilterAscii) > 0 {
 			}
 
-			width, _ := win.GetSize()
-			statusWidth := float32(0.1)
-
-			onlineImage  := nk.NkImageId(int32(imageOnlineStatusID))
-			offlineImage := nk.NkImageId(int32(imageOfflineStatusID))
-
-			// List area
-			nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
-			{
-				for _, contact := range state.c.Contacts {	
-					nk.NkLayoutRowPush(ctx, float32(width)*statusWidth)
-					{
-						if state.isOnline[contact.ID] {
-							nk.NkImage(ctx, onlineImage)
-						} else {
-							nk.NkImage(ctx, offlineImage)
-						}
-					}
-					nk.NkLayoutRowPush(ctx, float32(width)*(1-statusWidth))
-					{
-						if nk.NkButtonLabel(ctx, contact.ID) > 0 {
-							state.targetID = contact.ID
-							state.view = "chat"
-						}
-					}
+			if nk.NkButtonLabel(ctx, "+") > 0 {
+				err := state.c.AddContact(strings.TrimRight(string(state.toAddContact), "\x00"))
+				if err != nil {
+					fmt.Printf("Unable to add contact %s\n", err.Error())
 				}
+				state.toAddContact[0] = 0
 			}
-			/////
 		}
+
+		// List area
+		nk.NkLayoutRowBegin(ctx, nk.LayoutStatic, 25, 2)
+		{
+			for _, contact := range state.c.Contacts {	
+				nk.NkLayoutRowPush(ctx, float32(width)*statusWidth)
+				{
+					if state.isOnline[contact.ID] {
+						nk.NkImage(ctx, onlineImage)
+					} else {
+						nk.NkImage(ctx, offlineImage)
+					}
+				}
+				nk.NkLayoutRowPush(ctx, float32(width)*(1-statusWidth))
+				{
+					if nk.NkButtonLabel(ctx, contact.ID) > 0 {
+						state.targetID = contact.ID
+						state.view = "chat"
+					}
+				}
+			}
+		}
+		nk.NkLayoutRowEnd(ctx)
 		nk.NkGroupEnd(ctx)
 	}
 }
@@ -307,7 +303,8 @@ func ViewChat(ctx *nk.Context, state *State, height float32) {
 			if _, ok := state.chatOutput[state.targetID]; !ok {
 				state.chatOutput[state.targetID] = make([]byte, 32000)
 			}
-			if nk.NkEditStringZeroTerminated(ctx, nk.EditMultiline, state.chatOutput[state.targetID], 32000, nk.NkFilterAscii) > 0 {
+			if nk.NkEditStringZeroTerminated(ctx, nk.EditMultiline,
+				state.chatOutput[state.targetID], 32000, nk.NkFilterAscii) > 0 {
 
 			}
 		}
@@ -317,12 +314,16 @@ func ViewChat(ctx *nk.Context, state *State, height float32) {
 			if _, ok := state.chatInput[state.targetID]; !ok {
 				state.chatInput[state.targetID] = make([]byte, 256)
 			}
-			if nk.NkEditStringZeroTerminated(ctx, nk.EditField, state.chatInput[state.targetID], 256, nk.NkFilterAscii) > 0 {
 
+
+			if nk.NkEditStringZeroTerminated(ctx, nk.EditField,
+				state.chatInput[state.targetID], 256, nk.NkFilterAscii) > 0 {
 			}
-			if nk.NkButtonLabel(ctx, "send") > 0 {
-				state.chatOutput[state.targetID] = appenderNewLine(state.chatOutput[state.targetID],
-					[]byte(fmt.Sprintf("<%s:me> %s", time.Now().Format("2006-01-02 15:04:05"), state.chatInput[state.targetID])))
+
+			sendEvent := nk.NkButtonLabel(ctx, "send")
+			if sendEvent > 0 {
+				o := []byte(fmt.Sprintf("<%s:me> %s", time.Now().Format("2006-01-02 15:04:05"), state.chatInput[state.targetID]))
+				state.chatOutput[state.targetID] = appenderNewLine(state.chatOutput[state.targetID], o)
 				
 				// find the contact
 				for _, contact := range state.c.Contacts {
@@ -341,7 +342,9 @@ func ViewChat(ctx *nk.Context, state *State, height float32) {
 					}
 				}
 
-				state.chatInput[state.targetID][0] = 0
+				for i := 0; i<256;i++ {
+					state.chatInput[state.targetID][i] = 0x00
+				}
 			}
 		}
 		nk.NkGroupEnd(ctx)
