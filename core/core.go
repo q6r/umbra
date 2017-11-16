@@ -289,6 +289,7 @@ func (c *Core) setupNode(ctx context.Context) error {
 	cfg := new(core.BuildCfg)
 	cfg.Repo = c.Repo
 	cfg.Online = true
+	cfg.Permament = true
 	cfg.ExtraOpts = map[string]bool {
 		"pubsub": true,
 	}
@@ -297,7 +298,8 @@ func (c *Core) setupNode(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = c.Repo.SetConfigKey("Addresses.Swarm", []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", SwarmPort)})
+	err = c.Repo.SetConfigKey("Addresses.Swarm", []string{fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", SwarmPort),
+	fmt.Sprintf("/ip6/::/tcp/%d", SwarmPort)})
 	if err != nil {
 		return err
 	}
